@@ -1,0 +1,39 @@
+{
+  "name": "pi-tether-core",
+  "version": "0.1.0",
+  "description": "Shared building blocks for connecting Pi to official coding clients",
+  "type": "module",
+  "exports": {
+    "./runtime": "./src/runtime.ts",
+    "./pi-context": "./src/pi-context.ts",
+    "./request": "./src/request.ts",
+    "./security": "./src/security.ts",
+    "./socket-transport": "./src/socket-transport.ts",
+    "./register": "./src/register.ts",
+    "./lifecycle": "./src/lifecycle.ts",
+    "./pi-stream": "./src/pi-stream.ts",
+    "./mcp/bridge": "./src/mcp/bridge.ts",
+    "./system-prompt": "./src/system-prompt.ts",
+    "./metadata-ledger": "./src/metadata-ledger.ts"
+  },
+  "files": ["src/", "README.md", "LICENSE", "assets/", "docs/DETAILS.md"],
+  "license": "MIT",
+  "author": "kyraneth",
+  "keywords": ["pi-package", "pi", "tether", "mcp"],
+  "pi": { "extensions": [] },
+  "repository": { "type": "git", "url": "https://github.com/kyraneth/pi-tether-core.git" },
+  "homepage": "https://github.com/kyraneth/pi-tether-core",
+  "bugs": { "url": "https://github.com/kyraneth/pi-tether-core/issues" },
+  "engines": { "node": "^22.12.0 || >=24.0.0" },
+  "scripts": {
+    "test": "vitest run --dir tests --reporter=verbose --testTimeout=0 --hookTimeout=0",
+    "export-manifest": "node scripts/export-manifest.mjs",
+    "scan:public": "node scripts/public-tree.mjs"
+  },
+  "peerDependencies": { "@earendil-works/pi-ai": "*" },
+  "devDependencies": {
+    "@earendil-works/pi-ai": "1.5.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.12"
+  }
+}

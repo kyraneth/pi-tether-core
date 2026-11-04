@@ -1,0 +1,13 @@
+flowchart TB
+  accTitle: Where pi-tether-core sits
+  accDescr: Each tether sits between Pi and its official client. Both tethers are built on pi-tether-core, which they call as a library.
+  Pi --> M & C
+  subgraph Tethers
+    M[pi-muse-tether]
+    C[pi-claude-tether]
+    K[pi-tether-core]
+    M --> K
+    C --> K
+  end
+  M --> MC[Official Muse client]
+  C --> CC[Official Claude Code CLI]
