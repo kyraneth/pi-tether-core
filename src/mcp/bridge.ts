@@ -19,13 +19,20 @@ export interface BridgeInvocation {
   metadata?: unknown;
 }
 export interface BridgeResult { content: Array<{ type: "text"; text: string } | { type: "image"; data: string; mimeType: string }>; isError?: boolean }
-export type ReceiptState = "requested" | "surfaced_to_pi" | "result_journaled" | "response_sent" | "host_accepted" | "content_verified" | "unknown" | "mismatch";
-export interface BridgeReceipt extends BridgeInvocation { states: ReceiptState[]; resultHash?: string; journalEntryId?: string; isError?: boolean }
+/** Evidence strength is independent of local transport/journal delivery. */
+export type ReceiptEvidence =
+  | { kind: "exact" }
+  | { kind: "derivative" | "declared-lossy" | "transport-only" | "unknown"; reason: string };
+export type ReceiptState = "requested" | "surfaced_to_pi" | "result_journaled" | "response_sent" | "host_accepted" | "content_verified" | "evidence_recorded" | "unknown" | "mismatch";
+export interface BridgeReceipt extends BridgeInvocation { states: ReceiptState[]; resultHash?: string; journalEntryId?: string; isError?: boolean; evidence?: ReceiptEvidence }
 export interface JournaledBridgeResult extends BridgeInvocation { journalEntryId: string; result: BridgeResult }
 export interface BridgeOptions {
   sessionId: string;
   generation: string;
   tools: BridgeTool[];
+  /** Pi owns validation/coercion and returns journaled validation errors. The
+   * strict default is retained for adapters not yet qualified for this path. */
+  argumentValidation?: "strict" | "pi";
   /** Surface a normal Pi toolCall only. No executor is accepted by this API. */
   onInvocation: (invocation: BridgeInvocation) => void;
 }
@@ -79,7 +86,7 @@ export function createMcpBridge(options: BridgeOptions) {
       if (msg.type !== "call" || msg.schemaHash !== schemaHash || typeof msg.connectionId !== "string" || !msg.connectionId || !((typeof msg.requestId === "string") || (typeof msg.requestId === "number" && Number.isFinite(msg.requestId)))) { finish(errorResult("Invalid invocation identity or schema")); return; }
       const tool = declared.get(msg.name);
       if (!tool || !msg.arguments || typeof msg.arguments !== "object" || Array.isArray(msg.arguments)) { finish(errorResult("Undeclared tool or invalid arguments")); return; }
-      try {
+      if (options.argumentValidation !== "pi") try {
         // Use Pi's authoritative validator, but reject coercion: the effective schema
         // and the model's actual arguments are immutable bridge inputs.
         const checked = validateToolArguments({ name: tool.name, description: tool.description ?? "", parameters: tool.inputSchema } as any, { type: "toolCall", id: "validation", name: tool.name, arguments: msg.arguments });
@@ -140,17 +147,27 @@ export function createMcpBridge(options: BridgeOptions) {
     if (retired || fenced || r.receipt.states.at(-1) !== "response_sent") throw new Error("No sent response to accept");
     r.receipt.states.push("host_accepted");
   }
-  function verifyContent(inv: BridgeInvocation, observed: BridgeResult): boolean {
+  /**
+   * The adapter owns decoding and evidence classification. For a qualified
+   * derivative/lossy receipt, observed is its validated reconstruction, NOT proof
+   * of exact model consumption. Legacy two-argument callers supply no strength
+   * attestation and therefore remain unknown, even when the local hash matches.
+   * reason must be a body-free classification, never tool output or a secret.
+   */
+  function verifyContent(inv: BridgeInvocation, observed: BridgeResult, evidence: ReceiptEvidence = { kind: "unknown", reason: "legacy caller supplied no content attestation" }): boolean {
     const r = match(inv);
     if (retired || fenced || !["response_sent", "host_accepted"].includes(r.receipt.states.at(-1)!)) throw new Error("No sent response to verify");
+    if (!evidence || !["exact", "derivative", "declared-lossy", "transport-only", "unknown"].includes(evidence.kind) ||
+        (evidence.kind !== "exact" && (typeof evidence.reason !== "string" || !evidence.reason.trim()))) throw new Error("Invalid receipt evidence");
     const equal = resultValid(observed) && projectionHash(canonical(observed)) === r.receipt.resultHash;
-    r.receipt.states.push(equal ? "content_verified" : "mismatch");
+    r.receipt.evidence = clone(evidence);
+    r.receipt.states.push(equal ? (evidence.kind === "exact" ? "content_verified" : "evidence_recorded") : "mismatch");
     if (!equal) { fenced = true; attached = false; for (const socket of sockets) socket.destroy(); }
     return equal;
   }
   async function retire(): Promise<void> {
     retired = true; attached = false;
-    for (const r of records.values()) if (!["content_verified", "mismatch", "unknown"].includes(r.receipt.states.at(-1)!)) r.receipt.states.push("unknown");
+    for (const r of records.values()) if (!["content_verified", "evidence_recorded", "mismatch", "unknown"].includes(r.receipt.states.at(-1)!)) r.receipt.states.push("unknown");
     for (const socket of sockets) socket.destroy();
     if (server?.listening) await new Promise<void>(resolve => server!.close(() => resolve()));
     runtime.cleanupRuntimeDir();

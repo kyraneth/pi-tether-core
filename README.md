@@ -3,7 +3,7 @@
 
 A shared library for my [Pi](https://github.com/earendil-works/pi) tether extensions.
 
-Hi, I built this as a shared library for all my tether extensions for Pi. A tether connects Pi to an official coding client, so you can use a subscription from inside Pi. Today that means [pi-muse-tether](https://github.com/kyraneth/pi-muse-tether) and [pi-claude-tether](https://github.com/kyraneth/pi-claude-tether), and I'm planning more. Each one has to solve the same hard problems, so I wrote those parts once and every tether behaves the same way. I wrote it with a coding agent.
+Hi, I built this as a shared library for all my tether extensions for Pi. A tether connects Pi to an official coding client, so you can use a subscription from inside Pi. Today that means [pi-muse-tether](https://github.com/kyraneth/pi-muse-tether) and [pi-claude-tether](https://github.com/kyraneth/pi-claude-tether), and I'm planning more. Each one has to solve the same hard problems, so they share small building blocks. Their vendor capabilities, receipt evidence and qualified behavior still differ. I wrote it with a coding agent.
 
 You don't need to install this to use a tether. It comes with them, and it adds nothing to Pi on its own. You only need it if you want to connect Pi to another official client.
 

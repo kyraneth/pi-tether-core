@@ -15,10 +15,10 @@ afterEach(async () => {
   await Promise.all(bridges.splice(0).map(b => b.retire()));
 });
 function deferred<T>() { let resolve!: (v: T) => void; const promise = new Promise<T>(r => resolve = r); return { promise, resolve }; }
-async function setup(onInvocation?: (i: BridgeInvocation) => void) {
+async function setup(onInvocation?: (i: BridgeInvocation) => void, argumentValidation?: "strict" | "pi") {
   const queue: BridgeInvocation[] = [];
   const waiters: Array<(i: BridgeInvocation) => void> = [];
-  const bridge = createMcpBridge({ sessionId: "pi-session", generation: "generation-1", tools, onInvocation(i) { onInvocation?.(i); const waiter = waiters.shift(); if (waiter) waiter(i); else queue.push(i); } });
+  const bridge = createMcpBridge({ sessionId: "pi-session", generation: "generation-1", tools, argumentValidation, onInvocation(i) { onInvocation?.(i); const waiter = waiters.shift(); if (waiter) waiter(i); else queue.push(i); } });
   bridges.push(bridge);
   const descriptor = await bridge.start();
   const child = spawn(descriptor.command, descriptor.args, { env: { ...process.env, ...descriptor.env }, stdio: "pipe" });
@@ -73,10 +73,49 @@ describe("shared MCP bridge actual stdio → socket → Pi journal roundtrip", (
     expect((await p1).result).toEqual(image); expect((await p2).result).toEqual(text);
     expect(() => journal(s.bridge, a, image)).toThrow("settled");
     s.bridge.markHostAccepted(a);
-    expect(s.bridge.verifyContent(a, image)).toBe(true);
+    expect(s.bridge.verifyContent(a, image, { kind: "exact" })).toBe(true);
     expect(s.bridge.receipts()[0].states).toEqual(["requested", "surfaced_to_pi", "result_journaled", "response_sent", "host_accepted", "content_verified"]);
     const copy = s.bridge.receipts(); copy[0].states.length = 0;
     expect(s.bridge.receipts()[0].states.at(-1)).toBe("content_verified");
+  });
+  it("keeps legacy two-argument comparison unknown even when reconstructed input matches", async () => {
+    const s = await setup();
+    const pending = s.request("tools/call", { name: "work", arguments: { value: 1 } });
+    const inv = await s.next();
+    const reconstruction: BridgeResult = { content: [{ type: "text", text: "original synthetic result" }] };
+    journal(s.bridge, inv, reconstruction); await pending;
+    expect(s.bridge.verifyContent(inv, reconstruction)).toBe(true);
+    expect(s.bridge.receipts()[0].states).not.toContain("content_verified");
+    expect(s.bridge.receipts()[0].states.at(-1)).toBe("evidence_recorded");
+    expect(s.bridge.receipts()[0].evidence!.kind).toBe("unknown");
+  });
+  it.each(["derivative", "declared-lossy", "transport-only", "unknown"] as const)("records %s without promoting reconstructed content to exact", async kind => {
+    const s = await setup();
+    const pending = s.request("tools/call", { name: "work", arguments: { value: 1 } });
+    const inv = await s.next();
+    const result: BridgeResult = { content: [{ type: "image", data: "aGVsbG8=", mimeType: "image/png" }, { type: "text", text: "synthetic result" }] };
+    journal(s.bridge, inv, result);
+    expect((await pending).result).toEqual(result);
+    expect(() => s.bridge.verifyContent(inv, result, { kind, reason: "" })).toThrow("Invalid receipt evidence");
+    expect(s.bridge.verifyContent(inv, result, { kind, reason: "vendor receipt projection" })).toBe(true);
+    expect(s.bridge.receipts()[0].states.at(-1)).toBe("evidence_recorded");
+    expect(s.bridge.receipts()[0].states).not.toContain("content_verified");
+    expect(s.bridge.receipts()[0].evidence).toEqual({ kind, reason: "vendor receipt projection" });
+    const copy = s.bridge.receipts(); copy[0].evidence!.kind = "exact";
+    expect(s.bridge.receipts()[0].evidence!.kind).toBe(kind);
+    await s.bridge.retire();
+    expect(s.bridge.receipts()[0].states.at(-1)).toBe("evidence_recorded");
+  });
+  it.each(["exact", "derivative", "declared-lossy", "transport-only", "unknown"] as const)("never lets %s evidence excuse a seeded wrong body", async kind => {
+    const s = await setup();
+    const pending = s.request("tools/call", { name: "work", arguments: { value: 1 } });
+    const inv = await s.next();
+    const result: BridgeResult = { content: [{ type: "text", text: "original" }] };
+    journal(s.bridge, inv, result); await pending;
+    const evidence = kind === "exact" ? { kind } as const : { kind, reason: "vendor receipt projection" };
+    expect(s.bridge.verifyContent(inv, { content: [{ type: "text", text: "wrong" }] }, evidence)).toBe(false);
+    expect(s.bridge.receipts()[0].states.at(-1)).toBe("mismatch");
+    expect(() => s.bridge.setAttached(true)).toThrow("fenced");
   });
   it("rejects seeded authentication, generation, schema, tool and arguments before surfacing", async () => {
     const s = await setup();
@@ -88,6 +127,17 @@ describe("shared MCP bridge actual stdio → socket → Pi journal roundtrip", (
     expect((await s.request("tools/call", { name: "work", arguments: [] })).result.isError).toBe(true);
     s.bridge.setAttached(false);
     expect((await s.raw({})).isError).toBe(true);
+  });
+  it.each([{value: "1"}, {value: 0}, {}])("Pi-owned validation preserves raw arguments %j and all identity/receipt fences", async args => {
+    const s = await setup(undefined, "pi");
+    const response = s.request("tools/call", {name: "work", arguments: args});
+    const inv = await s.next();
+    expect(inv.arguments).toEqual(args);
+    const result: BridgeResult = {content: [{type:"text",text:"Pi journaled validation result"}],isError:true};
+    expect(()=>journal(s.bridge,{...inv,arguments:{value:999}},result)).toThrow("identity mismatch");
+    journal(s.bridge,inv,result);expect((await response).result).toEqual(result);
+    expect(s.bridge.verifyContent(inv,{content:[{type:"text",text:"wrong body"}],isError:true},{kind:"exact"})).toBe(false);
+    expect(s.bridge.receipts()[0].states.at(-1)).toBe("mismatch");
   });
   it("binds journal delivery to full pending identity, not tool/arguments, and refuses early receipt claims", async () => {
     const s = await setup(); const response = s.request("tools/call", { name: "work", arguments: { value: 1 } }); const inv = await s.next();

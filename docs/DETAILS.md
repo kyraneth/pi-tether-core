@@ -88,7 +88,7 @@ bridge.journalResult({
 
 This second snippet belongs inside the adapter's journal-commit handler; the application supplies those three variables. `journalResult` is a trusted adapter boundary, not an independent journal reader. A nonempty entry ID alone cannot prove that a journal write happened.
 
-Authentication, generation, schema and invocation identity are checked before surfacing a call. Arguments that need coercion are rejected rather than rewritten. Parallel calls with identical arguments remain distinct. MCP metadata stays opaque; vendor IDs are for the adapter to interpret.
+Authentication, generation, declaration hash and invocation identity are checked before surfacing a call. By default, arguments that violate the schema or need coercion are rejected rather than rewritten. Qualified adapters can set `argumentValidation: "pi"`: object arguments then reach Pi unchanged, Pi owns validation/coercion, and the adapter delivers Pi's journaled validation error or execution result through the same receipt path. Tool identity, exact original arguments and result verification remain mandatory in either mode. Parallel calls with identical arguments remain distinct. MCP metadata stays opaque; vendor IDs are for the adapter to interpret.
 
 Receipts progress through `requested`, `surfaced_to_pi`, `result_journaled` and `response_sent`. Sending socket bytes is **not** proof that a client accepted or consumed the content. Only call `markHostAccepted` or `verifyContent` when the adapter has corresponding evidence. Mismatches and uncertain interrupted calls fence the binding; there is no automatic replay. Detach preserves pending requests; it is not cancellation. Always retire the bridge when its binding ends.
 
