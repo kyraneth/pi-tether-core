@@ -5,7 +5,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const rootFiles = new Set([".gitignore", "package.json", "package-lock.json", "README.md", "LICENSE"]);
+const rootFiles = new Set([".gitignore", "package.json", "package-lock.json", "README.md", "CHANGELOG.md", "LICENSE"]);
 export function allowedPublicPath(path) {
   return rootFiles.has(path) || path === "docs/DETAILS.md" || /^assets\/[A-Za-z0-9_.-]+\.(?:svg|mmd)$/.test(path) || /^(src|tests|scripts)\/[A-Za-z0-9_./-]+$/.test(path);
 }

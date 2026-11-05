@@ -16,7 +16,7 @@
     "./system-prompt": "./src/system-prompt.ts",
     "./metadata-ledger": "./src/metadata-ledger.ts"
   },
-  "files": ["src/", "README.md", "LICENSE", "assets/", "docs/DETAILS.md"],
+  "files": ["src/", "README.md", "CHANGELOG.md", "LICENSE", "assets/", "docs/DETAILS.md"],
   "license": "MIT",
   "author": "kyraneth",
   "keywords": ["pi-package", "pi", "tether", "mcp"],

@@ -41,7 +41,7 @@ export function scanManifest(manifest, root = packageRoot, expected = exportMani
 }
 function packageManifest(root) {
   const files = paths(root).map(path => {
-    if (!(path === "package.json" || path === "README.md" || path === "LICENSE" || path === "docs/DETAILS.md" || /^assets\/[A-Za-z0-9_.-]+\.(?:svg|mmd)$/.test(path) || path.startsWith("src/")) || !allowedPublicPath(path)) throw new Error("Unexpected package entry");
+    if (!(path === "package.json" || path === "README.md" || path === "CHANGELOG.md" || path === "LICENSE" || path === "docs/DETAILS.md" || /^assets\/[A-Za-z0-9_.-]+\.(?:svg|mmd)$/.test(path) || path.startsWith("src/")) || !allowedPublicPath(path)) throw new Error("Unexpected package entry");
     return fileRecord(root, path);
   });
   if (!["package.json", "README.md", "LICENSE"].every(path => files.some(f => f.path === path))) throw new Error("Missing package metadata");
